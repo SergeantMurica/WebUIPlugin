@@ -1,0 +1,80 @@
+#include "WebUIWidget.h"
+#include "WebUIBridge.h"
+#include "SWebBrowser.h"
+#include "Interfaces/IPluginManager.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Text/STextBlock.h"
+
+UWebUIWidget::UWebUIWidget()
+{
+	Bridge = CreateDefaultSubobject<UWebUIBridge>(TEXT("WebUIBridge"));
+}
+
+void UWebUIWidget::LoadURL(const FString& NewURL)
+{
+	if (WebBrowserWidget.IsValid())
+	{
+		WebBrowserWidget->LoadURL(NewURL);
+	}
+}
+
+void UWebUIWidget::ExecuteJavaScript(const FString& ScriptText)
+{
+	if (WebBrowserWidget.IsValid())
+	{
+		WebBrowserWidget->ExecuteJavascript(ScriptText);
+	}
+}
+
+// This function is now only responsible for passing the object to our C++ bridge.
+void UWebUIWidget::BindUObject(const FString& Name, UObject* Object)
+{
+	if (Bridge)
+	{
+		Bridge->BindUObject(Name, Object);
+	}
+}
+
+TSharedRef<SWidget> UWebUIWidget::RebuildWidget()
+{
+	if (IsDesignTime())
+	{
+		return SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(TEXT("WebUI Widget")))];
+	}
+	else
+	{
+		FString URLToLoad = bIsDevMode ? InitialURL : GetProductionURL();
+		WebBrowserWidget = SNew(SWebBrowser)
+			.InitialURL(URLToLoad)
+			.SupportsTransparency(true)
+			// This delegate fires AFTER the page has loaded. This is the correct time to bind.
+			.OnLoadCompleted(FSimpleDelegate::CreateUObject(this, &UWebUIWidget::HandleOnLoadCompleted));
+		return WebBrowserWidget.ToSharedRef();
+	}
+}
+
+void UWebUIWidget::ReleaseSlateResources(bool bReleaseChildren)
+{
+	Super::ReleaseSlateResources(bReleaseChildren);
+	WebBrowserWidget.Reset();
+}
+
+// THIS IS THE MOST IMPORTANT FIX
+void UWebUIWidget::HandleOnLoadCompleted()
+{
+	if (Bridge && WebBrowserWidget.IsValid())
+	{
+		// We bind our bridge object to the JavaScript 'window' with the name 'ue'.
+		// The 'true' is critical - it exposes all UFUNCTIONs on the bridge to JavaScript.
+		WebBrowserWidget->BindUObject(TEXT("ue"), Bridge, true);
+		UE_LOG(LogTemp, Log, TEXT("WebUIFramework: UWebUIBridge successfully bound to JavaScript 'window.ue'"));
+	}
+}
+
+FString UWebUIWidget::GetProductionURL() const
+{
+	FString PluginDir = IPluginManager::Get().FindPlugin(TEXT("WebUIFramework"))->GetBaseDir();
+	FString HtmlPath = FPaths::Combine(PluginDir, TEXT("DevServer/src/templates/index.html"));
+	FPaths::MakeStandardFilename(HtmlPath);
+	return TEXT("file:///") + HtmlPath;
+}
