@@ -1,0 +1,46 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/Widget.h"
+#include "WebUIWidget.generated.h"
+
+class SWebBrowser;
+class UWebUIBridge;
+
+UCLASS()
+class WEBUIFRAMEWORK_API UWebUIWidget : public UWidget
+{
+	GENERATED_BODY()
+
+public:
+	UWebUIWidget();
+
+	UFUNCTION(BlueprintCallable, Category = "WebUI")
+	void LoadURL(const FString& NewURL);
+
+	UFUNCTION(BlueprintCallable, Category = "WebUI")
+	void ExecuteJavaScript(const FString& ScriptText);
+
+	UFUNCTION(BlueprintCallable, Category = "WebUI")
+	void BindUObject(const FString& Name, UObject* Object);
+
+	// If true, uses InitialURL. If false, loads the local index.html for packaged builds.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WebUI")
+	bool bIsDevMode = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WebUI", meta = (EditCondition = "bIsDevMode"))
+	FString InitialURL = TEXT("http://localhost:3000");
+
+protected:
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void ReleaseSlateResources(bool bReleaseChildren) override;
+
+private:
+	void HandleOnLoadCompleted();
+	FString GetProductionURL() const;
+
+	TSharedPtr<SWebBrowser> WebBrowserWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWebUIBridge> Bridge;
+};
